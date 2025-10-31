@@ -3,7 +3,7 @@
 on:
   schedule:
     - cron: '0 6 * * 1'  # tous les lundis à 6h UTC (7h heure belge)
-  workflow_dispatch:     # possibilité de trigger manuel
+  workflow_dispatch:     # possibilité de déclenchement manuel
 
 jobs:
   build:
@@ -36,7 +36,12 @@ jobs:
         set -e
         latest_release=$(curl -sSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest")
 
-        asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | .url')
+        assets_exist=$(echo "$latest_release" | jq '.assets | length > 0')
+
+        asset_url=""
+        if [ "$assets_exist" = "true" ]; then
+            asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | .url')
+        fi
 
         if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
           echo "No ICS asset found in latest release. Need to create a release."
