@@ -85,19 +85,22 @@ jobs:
       if: steps.check_release.outputs.needs_release == 'true' && github.event_name != 'pull_request'
       id: create_release
       uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: latest
         release_name: Latest ICS file
         draft: false
         prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload ICS asset to release
       if: steps.check_release.outputs.needs_release == 'true' && github.event_name != 'pull_request'
       uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./conges_scolaires_wbe_futurs.ics
         asset_name: conges_scolaires_wbe_futurs.ics
         asset_content_type: application/octet-stream
-        token: ${{ secrets.GITHUB_TOKEN }}
+        
