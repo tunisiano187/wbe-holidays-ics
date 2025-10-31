@@ -1,16 +1,16 @@
-﻿name: Générer le fichier ICS des congés WBE
+﻿name: Générer et publier ICS des congés WBE
 
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Chaque lundi à 6h00 UTC (7h heure belge)
-  workflow_dispatch:  # Permet un déclenchement manuel
+    - cron: '0 6 * * 1'  # tous les lundis à 6h UTC (7h heure belge)
+  workflow_dispatch:     # possibilité de trigger manuel
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out repository
+    - name: Checkout repository
       uses: actions/checkout@v3
 
     - name: Setup Python
@@ -26,8 +26,55 @@ jobs:
     - name: Run ICS generation script
       run: python generate_ics.py
 
-    - name: Archive generated ICS
-      uses: actions/upload-artifact@v4
+    - name: Check if ICS is different from last release
+      id: check_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        ICS_FILE: ./conges_scolaires_wbe_futurs.ics
+      run: |
+        set -e
+        latest_release=$(curl -sSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest")
+
+        asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | .url')
+
+        if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
+          echo "No ICS asset found in latest release. Need to create a release."
+          echo "needs_release=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$asset_url" -o old_ics.ics
+
+        new_sha=$(sha256sum "$ICS_FILE" | awk '{print $1}')
+        old_sha=$(sha256sum old_ics.ics | awk '{print $1}')
+
+        echo "New ICS SHA256: $new_sha"
+        echo "Old ICS SHA256: $old_sha"
+
+        if [ "$new_sha" = "$old_sha" ]; then
+          echo "ICS file unchanged. No release needed."
+          echo "needs_release=false" >> $GITHUB_OUTPUT
+        else
+          echo "ICS file changed. Release will be created."
+          echo "needs_release=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create or update release
+      if: steps.check_release.outputs.needs_release == 'true'
+      id: create_release
+      uses: actions/create-release@v1
       with:
-        name: conges_scolaires_wbe_ics
-        path: conges_scolaires_wbe_futurs.ics
+        tag_name: latest
+        release_name: Latest ICS file
+        draft: false
+        prerelease: false
+
+    - name: Upload ICS asset to release
+      if: steps.check_release.outputs.needs_release == 'true'
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./conges_scolaires_wbe_futurs.ics
+        asset_name: conges_scolaires_wbe_futurs.ics
+        asset_content_type: application/octet-stream
