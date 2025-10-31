@@ -27,7 +27,7 @@ jobs:
       run: python generate_ics.py
 
     - name: Archive generated ICS
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: conges_scolaires_wbe_ics
         path: conges_scolaires_wbe_futurs.ics
