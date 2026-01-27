@@ -15,6 +15,8 @@ def install_and_import(package, import_name=None):
 install_and_import('requests')
 install_and_import('beautifulsoup4', 'bs4')
 
+import requests
+import bs4
 from datetime import datetime, timedelta
 import re
 
@@ -27,8 +29,9 @@ html = response.text
 soup = bs4.BeautifulSoup(html, 'html.parser')
 text = soup.get_text(separator="\n")
 
+day_pattern = r"(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?"
 pattern = re.compile(
-    r"(.+?)\s*:\s*(?:du\s+)?(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?\s*([0-9]{1,2})\s+(\w+)\s+([0-9]{4})(?:\s*au\s*(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?\s*([0-9]{1,2})\s+(\w+)\s+([0-9]{4}))?",
+    rf"(.+?)\s*:\s*(?:du\s+)?{day_pattern}\s*(\d{{1,2}})\s+(\w+)\s+(\d{{4}})(?:\s*au\s*{day_pattern}\s*(\d{{1,2}})\s+(\w+)\s+(\d{{4}}))?",
     re.IGNORECASE
 )
 

@@ -56,7 +56,7 @@ jobs:
 
         asset_url=""
         if [ "$assets_exist" = "true" ]; then
-            asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | ..url')
+            asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | .url')
         fi
 
         if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
