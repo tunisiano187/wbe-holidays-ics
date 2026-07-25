@@ -73,6 +73,28 @@ for match in pattern.finditer(text):
     conges.append((nom, date_debut, date_fin))
 
 today = datetime.today()
+
+# Le site du WBE ne publie les congés que pour les 1-2 prochaines années
+# scolaires. Comme les vacances d'été sont très stables d'une année à
+# l'autre (du 1er juillet au 31 août), on complète automatiquement les
+# années manquantes pour couvrir les 3 prochaines années scolaires, afin
+# que le calendrier ne soit jamais "vide" en fin de période connue.
+NB_ANNEES_A_COUVRIR = 3
+
+annees_ete_connues = {
+    c[1].year for c in conges if "été" in c[0].lower()
+}
+
+annees_cibles = range(today.year, today.year + NB_ANNEES_A_COUVRIR + 1)
+for annee in annees_cibles:
+    if annee in annees_ete_connues:
+        continue
+    debut_estime = datetime(annee, 7, 1)
+    fin_estimee = datetime(annee, 8, 31)
+    if fin_estimee < today:
+        continue
+    conges.append((f"Vacances d'été {annee} (estimation)", debut_estime, fin_estimee))
+
 conges_futurs = [c for c in conges if c[1] >= today]
 
 def format_date(d):
