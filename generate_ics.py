@@ -73,6 +73,51 @@ for match in pattern.finditer(text):
     conges.append((nom, date_debut, date_fin))
 
 today = datetime.today()
+
+# Le site du WBE ne publie les congés que pour les 1-2 prochaines années
+# scolaires. On complète automatiquement les années manquantes pour couvrir
+# les 3 prochaines années scolaires, afin que le calendrier ne soit jamais
+# "vide" en fin de période connue.
+#
+# Depuis la réforme des rythmes scolaires de 2022 (Pacte pour un Enseignement
+# d'Excellence), les grandes vacances ne courent plus de juillet à fin août :
+# elles ont été raccourcies à 7 semaines (les 2 semaines retirées ont été
+# redistribuées aux congés de Toussaint et de Pâques, désormais sur 2
+# semaines). Le ministère a déjà fixé et publié les dates jusqu'en 2031 ;
+# on les utilise donc telles quelles plutôt que de deviner.
+# Source : https://www.rtbf.be/article/calendrier-scolaire-quelles-seront-les-dates-de-rentree-et-des-vacances-jusqu-en-2032-10761315
+VACANCES_ETE_OFFICIELLES = {
+    2026: (datetime(2026, 7, 4), datetime(2026, 8, 23)),
+    2027: (datetime(2027, 7, 3), datetime(2027, 8, 29)),
+    2028: (datetime(2028, 7, 7), datetime(2028, 8, 27)),
+    2029: (datetime(2029, 7, 6), datetime(2029, 8, 26)),
+    2030: (datetime(2030, 7, 5), datetime(2030, 8, 25)),
+    2031: (datetime(2031, 7, 4), datetime(2031, 8, 24)),
+}
+
+NB_ANNEES_A_COUVRIR = 3
+
+annees_ete_connues = {
+    c[1].year for c in conges if "été" in c[0].lower()
+}
+
+annees_cibles = range(today.year, today.year + NB_ANNEES_A_COUVRIR + 1)
+for annee in annees_cibles:
+    if annee in annees_ete_connues:
+        continue
+    if annee in VACANCES_ETE_OFFICIELLES:
+        debut, fin = VACANCES_ETE_OFFICIELLES[annee]
+        nom = f"Vacances d'été {annee}"
+    else:
+        # Au-delà du calendrier officiel publié : approximation basée sur la
+        # durée typique post-réforme (~7 semaines, début juillet à fin août).
+        debut = datetime(annee, 7, 1)
+        fin = datetime(annee, 8, 24)
+        nom = f"Vacances d'été {annee} (estimation)"
+    if fin < today:
+        continue
+    conges.append((nom, debut, fin))
+
 conges_futurs = [c for c in conges if c[1] >= today]
 
 def format_date(d):
