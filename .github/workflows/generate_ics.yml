@@ -1,4 +1,4 @@
-﻿name: Générer et publier ICS des congés WBE
+name: Générer et publier ICS des congés WBE
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 6 * * 1'  # tous les lundis à 6h UTC (7h heure belge)
-  workflow_dispatch:     # possibilité de déclenchement manuel
+    - cron: '0 6 1 * *'   # le 1er de chaque mois à 6h UTC (7h heure belge)
+  workflow_dispatch:       # possibilité de déclenchement manuel
 
 permissions:
   contents: write
@@ -35,54 +35,43 @@ jobs:
     - name: Run ICS generation script
       run: python generate_ics.py
 
-    - name: Check if ICS is different from last release
-      id: check_release
+    - name: Commit le fichier ICS s'il a changé
+      id: commit_ics
+      if: github.event_name != 'pull_request'
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        REPO: ${{ github.repository }}
-        ICS_FILE: ./conges_scolaires_wbe_futurs.ics
+        ICS_FILE: conges_scolaires_wbe_futurs.ics
       run: |
         set -e
-        # If no token is available (e.g. PR from fork), skip release check to avoid failures
-        if [ -z "$GITHUB_TOKEN" ]; then
-          echo "GITHUB_TOKEN not available; skipping release check (likely a fork)."
-          echo "needs_release=false" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        latest_release=$(curl -sSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest")
-
-        assets_exist=$(echo "$latest_release" | jq '.assets | length > 0')
-
-        asset_url=""
-        if [ "$assets_exist" = "true" ]; then
-            asset_url=$(echo "$latest_release" | jq -r '.assets[] | select(.name == "conges_scolaires_wbe_futurs.ics") | .url')
-        fi
-
-        if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
-          echo "No ICS asset found in latest release. Need to create a release."
-          echo "needs_release=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$asset_url" -o old_ics.ics
-
-        new_sha=$(sha256sum "$ICS_FILE" | awk '{print $1}')
-        old_sha=$(sha256sum old_ics.ics | awk '{print $1}')
-
-        echo "New ICS SHA256: $new_sha"
-        echo "Old ICS SHA256: $old_sha"
-
-        if [ "$new_sha" = "$old_sha" ]; then
-          echo "ICS file unchanged. No release needed."
-          echo "needs_release=false" >> $GITHUB_OUTPUT
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        if [ -z "$(git status --porcelain -- "$ICS_FILE")" ]; then
+          echo "Fichier ICS inchangé."
+          echo "changed=false" >> "$GITHUB_OUTPUT"
         else
-          echo "ICS file changed. Release will be created."
-          echo "needs_release=true" >> $GITHUB_OUTPUT
+          git add "$ICS_FILE"
+          git commit -m "chore: mettre à jour le fichier ICS des congés scolaires [skip ci]"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Create or update release
-      if: steps.check_release.outputs.needs_release == 'true' && github.event_name != 'pull_request'
+    # Le dépôt doit avoir au moins un commit par mois, sinon GitHub désactive
+    # automatiquement le déclencheur "schedule" ci-dessus après 60 jours sans
+    # activité. Comme ce job ne tourne plus qu'une fois par mois, on garantit
+    # ce commit à chaque exécution : soit la vraie mise à jour ci-dessus,
+    # soit ce commit vide de maintien quand le calendrier n'a pas changé.
+    - name: Commit de maintien si rien n'a changé
+      if: steps.commit_ics.outputs.changed == 'false' && github.event_name != 'pull_request'
+      run: |
+        set -e
+        git commit --allow-empty -m "chore: commit de maintien mensuel pour éviter la désactivation par inactivité [skip ci]"
+        git push origin HEAD:main
+
+    - name: Horodatage de la vérification
+      id: checked_at
+      run: echo "value=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+    - name: Créer ou mettre à jour la release
+      if: github.event_name != 'pull_request'
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,21 +81,6 @@ jobs:
         draft: false
         prerelease: false
         files: ./conges_scolaires_wbe_futurs.ics
-        body: "Fichier ICS avec les congés scolaires futurs de la Fédération Wallonie-Bruxelles"
-
-    - name: Commit updated ICS file to the repository
-      if: github.event_name != 'pull_request'
-      env:
-        ICS_FILE: conges_scolaires_wbe_futurs.ics
-      run: |
-        set -e
-        if [ -z "$(git status --porcelain -- "$ICS_FILE")" ]; then
-          echo "ICS file unchanged in the repository. Nothing to commit."
-          exit 0
-        fi
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add "$ICS_FILE"
-        git commit -m "chore: mettre à jour le fichier ICS des congés scolaires [skip ci]"
-        git push origin HEAD:main
-
+        body: |
+          Fichier ICS avec les congés scolaires futurs de la Fédération Wallonie-Bruxelles.
+          Dernière vérification automatique : ${{ steps.checked_at.outputs.value }} (contenu ${{ steps.commit_ics.outputs.changed == 'true' && 'mis à jour' || 'inchangé' }} à cette occasion).
