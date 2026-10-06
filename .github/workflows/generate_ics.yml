@@ -68,9 +68,11 @@ jobs:
 
     - name: Horodatage de la vérification
       id: checked_at
-      run: echo "value=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "value=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+        echo "date_tag=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
-    - name: Créer ou mettre à jour la release
+    - name: Créer ou mettre à jour la release "latest"
       if: github.event_name != 'pull_request'
       uses: softprops/action-gh-release@v1
       env:
@@ -84,3 +86,21 @@ jobs:
         body: |
           Fichier ICS avec les congés scolaires futurs de la Fédération Wallonie-Bruxelles.
           Dernière vérification automatique : ${{ steps.checked_at.outputs.value }} (contenu ${{ steps.commit_ics.outputs.changed == 'true' && 'mis à jour' || 'inchangé' }} à cette occasion).
+
+    # En plus de "latest" (pointeur stable toujours à jour), on garde une
+    # release distincte par changement réel de contenu, taguée avec la date
+    # au format AAAA-MM-JJ : ça donne un historique des versions qui reflète
+    # les vraies mises à jour du calendrier, pas une release par run.
+    - name: Créer une release datée (historique des versions)
+      if: steps.commit_ics.outputs.changed == 'true' && github.event_name != 'pull_request'
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.checked_at.outputs.date_tag }}
+        name: ICS ${{ steps.checked_at.outputs.date_tag }}
+        draft: false
+        prerelease: false
+        files: ./conges_scolaires_wbe_futurs.ics
+        body: |
+          Snapshot du fichier ICS généré le ${{ steps.checked_at.outputs.value }}, suite à un changement du calendrier des congés scolaires.
